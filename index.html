@@ -1573,11 +1573,6 @@
   <div class="toast" id="toast"></div>
 
   <script>
-    // Import the functions you need from the SDKs you need
-    import { initializeApp } from "firebase/app";
-    // TODO: Add SDKs for Firebase products that you want to use
-    // https://firebase.google.com/docs/web/setup#available-libraries
-
     // Your web app's Firebase configuration
     const firebaseConfig = {
       apiKey: "AIzaSyBBTYQyE4SoL10vJ9d9Zt1S0iueEDkrRqY",
@@ -1588,9 +1583,6 @@
       messagingSenderId: "737725356480",
       appId: "1:737725356480:web:7a70c46669cf57b098d025"
     };
-
-    // Initialize Firebase
-    const app = initializeApp(firebaseConfig);
 
     let auth = null, dataRef = null, firebaseReady = false;
     const configFilled = !firebaseConfig.apiKey.startsWith('PASTE_');
