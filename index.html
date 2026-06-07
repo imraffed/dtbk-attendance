@@ -760,6 +760,10 @@
       color: var(--blue)
     }
 
+    .val-excused-unpaid {
+      color: var(--green)
+    }
+
     .val-wu {
       font-size: 0.62rem;
       font-weight: 700;
@@ -1019,6 +1023,18 @@
       color: var(--text-muted);
       background: var(--surface2);
       border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 11px;
+      margin-bottom: 14px;
+      line-height: 1.4;
+      display: none
+    }
+
+    .usl-note {
+      font-size: 0.74rem;
+      color: var(--green);
+      background: rgba(127, 176, 105, 0.08);
+      border: 1px solid rgba(127, 176, 105, 0.3);
       border-radius: 8px;
       padding: 8px 11px;
       margin-bottom: 14px;
@@ -1309,6 +1325,11 @@
       color: var(--blue)
     }
 
+    .cal-excused-unpaid {
+      background: rgba(127, 176, 105, 0.16);
+      color: var(--green)
+    }
+
     .cal-wu {
       background: rgba(108, 155, 212, 0.1);
       box-shadow: inset 0 0 0 1px rgba(108, 155, 212, 0.5)
@@ -1470,13 +1491,17 @@
       <h3 id="editTitle">Edit Entry</h3>
       <p class="subtitle" id="editSubtitle"></p>
       <div class="auto-note" id="autoNote"></div>
+      <div class="usl-note" id="uslNote"></div>
       <div class="modal-label">Occurrence</div>
       <div class="modal-btns">
         <button class="opt-btn opt-half" data-val="0.5" onclick="pickVal('0.5')">Late · 0.5</button>
         <button class="opt-btn opt-one" data-val="1" onclick="pickVal('1')">Callout · 1</button>
       </div>
       <div class="modal-btns">
-        <button class="opt-btn opt-excused" data-val="excused" onclick="pickVal('excused')">Excused</button>
+        <button class="opt-btn opt-excused" data-val="excused_paid" onclick="pickVal('excused_paid')">Excused · Paid</button>
+        <button class="opt-btn opt-excused" data-val="excused_unpaid" onclick="pickVal('excused_unpaid')">Excused · Unpaid (NY)</button>
+      </div>
+      <div class="modal-btns">
         <button class="opt-btn opt-clear" data-val="" onclick="pickVal('')">None / Clear</button>
       </div>
       <div class="divider"></div>
@@ -1566,6 +1591,10 @@
           <div class="label">Current<br>write-up</div>
           <div class="value" id="profWu" style="font-size:1.1rem;padding-top:6px"></div>
         </div>
+        <div class="stat-card">
+          <div class="label">Unpaid sick left<br><span id="profUslYear"></span></div>
+          <div class="value" id="profUsl" style="font-size:1.3rem;padding-top:4px"></div>
+        </div>
       </div>
       <div class="cal-nav">
         <button onclick="calMove(-1)">‹</button>
@@ -1581,7 +1610,10 @@
           <div class="key-swatch cal-one" style="background:rgba(226,104,95,0.4)"></div> Callout
         </div>
         <div class="key-item">
-          <div class="key-swatch cal-excused" style="background:rgba(108,155,212,0.4)"></div> Excused
+          <div class="key-swatch cal-excused" style="background:rgba(108,155,212,0.4)"></div> Excused (paid)
+        </div>
+        <div class="key-item">
+          <div class="key-swatch cal-excused-unpaid" style="background:rgba(127,176,105,0.4)"></div> Unpaid sick
         </div>
         <div class="key-item">
           <div class="key-swatch"
@@ -1690,6 +1722,19 @@
     /* ============ Policy helpers ============ */
     function todayStr() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
     const WU_TYPES = ['1st', '2nd', 'final', 'terminated', 'term'];
+    /* NY unpaid sick time: 32 hours = 4 shifts per calendar year, resets Jan 1 */
+    const UNPAID_SICK_HOURS_PER_YEAR = 32;
+    const HOURS_PER_SHIFT = 8;
+    const UNPAID_SICK_SHIFTS_PER_YEAR = UNPAID_SICK_HOURS_PER_YEAR / HOURS_PER_SHIFT;
+    function countUnpaidSickShifts(dates, year) {
+      const y = year || new Date().getFullYear();
+      let n = 0;
+      Object.entries(dates || {}).forEach(([d, v]) => {
+        if ((v || '').toString().trim().toLowerCase() === 'excused_unpaid' && d.substring(0, 4) === String(y)) n++;
+      });
+      return n;
+    }
+    function unpaidSickRemainingShifts(dates, year) { return Math.max(0, UNPAID_SICK_SHIFTS_PER_YEAR - countUnpaidSickShifts(dates, year)); }
     function isWriteup(v) { return WU_TYPES.includes((v || '').toString().trim().toLowerCase()); }
     function getPoints(val) {
       const v = (val || '').toString().trim().toLowerCase();
@@ -1738,7 +1783,8 @@
       const s = (v || '').toString().trim().toLowerCase();
       if (s === '0.5') return '<span class="val-half">0.5</span>';
       if (s === '1' || s === '1.0') return '<span class="val-one">1</span>';
-      if (s === 'excused') return '<span class="val-excused">EXC</span>';
+      if (s === 'excused' || s === 'excused_paid') return '<span class="val-excused">EXC</span>';
+      if (s === 'excused_unpaid') return '<span class="val-excused-unpaid">USL</span>';
       if (s === '1st') return '<span class="val-wu wu-1st">1st</span>';
       if (s === '2nd') return '<span class="val-wu wu-2nd">2nd</span>';
       if (s === 'final') return '<span class="val-wu wu-final">FIN</span>';
@@ -1780,10 +1826,10 @@
         .filter(([k, v]) => (v.displayName || k).toLowerCase().includes(q))
         .filter(([k, v]) => activeFilter === 'all' || k === activeFilter)
         .sort((a, b) => (a[1].displayName || a[0]).localeCompare(b[1].displayName || b[0]));
-      const btn = document.getElementById('archiveToggleBtn');
-      if (btn) {
-        btn.textContent = showArchived ? 'Hide Archived' : `Show Archived${archivedCount ? ' (' + archivedCount + ')' : ''}`;
-        btn.classList.toggle('primary', showArchived);
+      const atb = document.getElementById('archiveToggleBtn');
+      if (atb) {
+        atb.textContent = showArchived ? 'Hide Archived' : `Show Archived${archivedCount ? ' (' + archivedCount + ')' : ''}`;
+        atb.classList.toggle('primary', showArchived);
       }
       if (!Object.keys(attendanceData).length) {
         document.getElementById('emptyState').style.display = 'block';
@@ -1829,10 +1875,27 @@
       const an = document.getElementById('autoNote');
       const meta = (p && p.meta && p.meta[dt]) ? p.meta[dt] : '';
       if (meta) { an.textContent = 'From clock software: ' + meta; an.style.display = 'block'; } else an.style.display = 'none';
+      updateUslNote();
       document.getElementById('editModal').classList.add('active');
     }
+    function updateUslNote() {
+      const el = document.getElementById('uslNote'); if (!el) return;
+      const p = attendanceData[editingPerson]; if (!p) { el.style.display = 'none'; return; }
+      const year = editingDate ? parseInt(editingDate.substring(0, 4)) : new Date().getFullYear();
+      const dates = p.dates || {};
+      // Balance excluding this day, so the line shows what's left before applying today's choice
+      const used = Object.entries(dates).filter(([d, v]) => d !== editingDate && (v || '').toString().toLowerCase() === 'excused_unpaid' && d.substring(0, 4) === String(year)).length;
+      const remaining = Math.max(0, UNPAID_SICK_SHIFTS_PER_YEAR - used);
+      const remHrs = remaining * HOURS_PER_SHIFT;
+      let txt = `Unpaid sick (NY), ${year}: ${remaining} of ${UNPAID_SICK_SHIFTS_PER_YEAR} shifts left (${remHrs} hrs) before this day.`;
+      if (pendingVal === 'excused_unpaid') {
+        if (remaining <= 0) txt += ' ⚠ This would exceed their bank.';
+        else txt += ` Marking unpaid uses 1 → ${remaining - 1} left.`;
+      }
+      el.textContent = txt; el.style.display = 'block';
+    }
     function highlightVal(val) { document.querySelectorAll('#editModal .opt-btn').forEach(b => b.classList.toggle('sel', (b.dataset.val || '').toLowerCase() === (val || '').toLowerCase())); }
-    function pickVal(v) { pendingVal = v; highlightVal(v); }
+    function pickVal(v) { pendingVal = v; highlightVal(v); updateUslNote(); }
     function saveEdit() {
       if (!editingPerson || !editingDate) return;
       const note = document.getElementById('noteInput').value.trim();
@@ -1895,6 +1958,13 @@
       const l = document.getElementById('profLast60'); l.className = 'value ' + ptsColor(last60); l.textContent = fmt(last60);
       const s = document.getElementById('profSinceWu'); s.className = 'value ' + ptsColor(sinceWu); s.textContent = active ? fmt(sinceWu) : '—';
       document.getElementById('profWu').innerHTML = active ? wuTagHtml(dates) : '<span style="color:var(--text-muted);font-size:1rem">None active</span>';
+      const uslYear = calYear;
+      const uslUsed = countUnpaidSickShifts(dates, uslYear);
+      const uslLeft = Math.max(0, UNPAID_SICK_SHIFTS_PER_YEAR - uslUsed);
+      const uslEl = document.getElementById('profUsl');
+      const yrEl = document.getElementById('profUslYear'); if (yrEl) yrEl.textContent = '(' + uslYear + ')';
+      uslEl.className = 'value ' + (uslLeft === 0 ? 'pts-red' : uslLeft <= 1 ? 'pts-amber' : 'pts-green');
+      uslEl.innerHTML = `${uslLeft}<span style="font-size:0.8rem;font-weight:600"> / ${UNPAID_SICK_SHIFTS_PER_YEAR} shifts</span><br><span style="font-size:0.72rem;font-weight:500;color:var(--text-muted)">${uslLeft * HOURS_PER_SHIFT} of ${UNPAID_SICK_HOURS_PER_YEAR} hrs left</span>`;
       const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
       document.getElementById('calLabel').textContent = monthNames[calMonth] + ' ' + calYear;
       let html = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => `<div class="cal-dow">${d}</div>`).join('');
@@ -1906,7 +1976,8 @@
         let cls = 'cal-day', tag = '';
         if (v === '0.5') { cls += ' cal-half'; tag = 'Late'; }
         else if (v === '1' || v === '1.0') { cls += ' cal-one'; tag = 'Out'; }
-        else if (v === 'excused') { cls += ' cal-excused'; tag = 'Exc'; }
+        else if (v === 'excused' || v === 'excused_paid') { cls += ' cal-excused'; tag = 'Exc'; }
+        else if (v === 'excused_unpaid') { cls += ' cal-excused-unpaid'; tag = 'USL'; }
         else if (isWriteup(v)) { cls += ' cal-wu'; tag = (v === 'terminated' || v === 'term') ? 'Term' : v === 'final' ? 'Final' : v; }
         if (ds === today) cls += ' today';
         const noteAttr = hasNote ? ` title="${(notes[ds] || '').replace(/"/g, '&quot;')}"` : '';
@@ -2046,10 +2117,11 @@
     function exportCSV() {
       if (!Object.keys(attendanceData).length) { toast('No data', 'error'); return; }
       rebuildDates();
-      let csv = 'Employee,Last 60 Days,Since Write-Up,Active Write-Up,' + allDates.map(d => fmtDateLong(d)).join(',') + '\n';
+      let csv = 'Employee,Last 60 Days,Since Write-Up,Active Write-Up,Unpaid Sick Hrs Left (' + new Date().getFullYear() + '),' + allDates.map(d => fmtDateLong(d)).join(',') + '\n';
       Object.entries(attendanceData).sort((a, b) => (a[1].displayName || a[0]).localeCompare(b[1].displayName || b[0])).forEach(([k, p]) => {
         const dates = p.dates || {}, active = getActiveWriteup(dates) || '';
-        const row = [p.displayName || k, getLast60Pts(dates), active ? getPtsSinceWriteup(dates) : '', active, ...allDates.map(d => dates[d] || '')];
+        const uslHrsLeft = unpaidSickRemainingShifts(dates) * HOURS_PER_SHIFT;
+        const row = [p.displayName || k, getLast60Pts(dates), active ? getPtsSinceWriteup(dates) : '', active, uslHrsLeft, ...allDates.map(d => dates[d] || '')];
         csv += row.map(c => `"${c}"`).join(',') + '\n';
       });
       const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
