@@ -691,6 +691,24 @@
       text-decoration: line-through
     }
 
+    .arch-badge {
+      display: inline-block;
+      margin-left: 7px;
+      padding: 2px 7px;
+      border-radius: 5px;
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      border: 1px solid var(--border-light);
+      background: var(--surface2)
+    }
+
+    tr.row-archived td:nth-child(n+2) {
+      opacity: 0.5
+    }
+
     .wu-tag {
       display: inline-block;
       padding: 2px 8px;
@@ -1427,6 +1445,7 @@
         </div>
         <button class="btn primary" onclick="openImport()">↑ Import Weekly CSV</button>
         <button class="btn" onclick="openAddPerson()">+ Add Employee</button>
+        <button class="btn" id="archiveToggleBtn" onclick="toggleShowArchived()">Show Archived</button>
         <button class="btn" onclick="exportCSV()">↓ Export</button>
         <button class="btn danger" onclick="confirmClear()">Clear All</button>
       </div>
@@ -1528,7 +1547,11 @@
           <div class="profile-name" id="profName"></div>
           <div class="profile-sub" id="profSub"></div>
         </div>
-        <button class="btn" onclick="closeProfile()">Close</button>
+        <div style="display:flex;gap:7px;flex-shrink:0">
+          <button class="btn" id="profArchiveBtn" onclick="toggleArchive()">Archive</button>
+          <button class="btn danger" onclick="deleteEmployee()">Delete</button>
+          <button class="btn" onclick="closeProfile()">Close</button>
+        </div>
       </div>
       <div class="stat-row">
         <div class="stat-card">
@@ -1601,6 +1624,7 @@
     let allDates = [];
     let editingPerson = null, editingDate = null, pendingVal = null;
     let activeFilter = 'all';
+    let showArchived = false;
     let profilePerson = null;
     let calYear, calMonth;
     let pendingImport = null;
@@ -1732,10 +1756,10 @@
     }
     function toggleFilterMenu(e) { e.stopPropagation(); buildFilterMenu(); document.getElementById('filterMenu').classList.toggle('active'); }
     function buildFilterMenu() {
-      const people = Object.entries(attendanceData).sort((a, b) => (a[1].displayName || a[0]).localeCompare(b[1].displayName || b[0]));
+      const people = Object.entries(attendanceData).filter(([k, v]) => showArchived ? true : !v.archived).sort((a, b) => (a[1].displayName || a[0]).localeCompare(b[1].displayName || b[0]));
       const chk = '<svg class="chk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>';
       let html = `<div class="dropdown-item ${activeFilter === 'all' ? 'selected' : ''}" onclick="setFilter('all')">${chk}All Employees</div>`;
-      people.forEach(([k, p]) => { html += `<div class="dropdown-item ${activeFilter === k ? 'selected' : ''}" onclick="setFilter('${k.replace(/'/g, "\\'")}')">${chk}${p.displayName || k}</div>`; });
+      people.forEach(([k, p]) => { html += `<div class="dropdown-item ${activeFilter === k ? 'selected' : ''}" onclick="setFilter('${k.replace(/'/g, "\\'")}')">${chk}${p.displayName || k}${p.archived ? ' <span style="color:var(--text-muted);font-size:0.7rem">(archived)</span>' : ''}</div>`; });
       document.getElementById('filterMenu').innerHTML = html;
     }
     function setFilter(k) {
@@ -1750,10 +1774,17 @@
     function renderTable() {
       rebuildDates();
       const q = (document.getElementById('searchBox').value || '').toLowerCase();
+      const archivedCount = Object.values(attendanceData).filter(v => v.archived).length;
       let people = Object.entries(attendanceData)
+        .filter(([k, v]) => showArchived ? true : !v.archived)
         .filter(([k, v]) => (v.displayName || k).toLowerCase().includes(q))
         .filter(([k, v]) => activeFilter === 'all' || k === activeFilter)
         .sort((a, b) => (a[1].displayName || a[0]).localeCompare(b[1].displayName || b[0]));
+      const btn = document.getElementById('archiveToggleBtn');
+      if (btn) {
+        btn.textContent = showArchived ? 'Hide Archived' : `Show Archived${archivedCount ? ' (' + archivedCount + ')' : ''}`;
+        btn.classList.toggle('primary', showArchived);
+      }
       if (!Object.keys(attendanceData).length) {
         document.getElementById('emptyState').style.display = 'block';
         document.getElementById('mainTable').style.display = 'none'; return;
@@ -1770,19 +1801,21 @@
         const sinceWu = active ? getPtsSinceWriteup(dates) : 0;
         const nc = nameColor(dates);
         const tag = wuTagHtml(dates) || '<span style="color:var(--text-muted)">·</span>';
+        const archBadge = person.archived ? '<span class="arch-badge">Archived</span>' : '';
         const cells = allDates.map(d => {
           const v = dates[d] || '';
           const hasNote = !!(notes[d] && notes[d].trim());
           const noteAttr = hasNote ? ` title="${(notes[d] || '').replace(/"/g, '&quot;')}"` : '';
           return `<td class="date-cell" onclick="openEdit('${key.replace(/'/g, "\\'")}','${d}')"${noteAttr}>${cellHtml(v)}${hasNote ? '<span class="note-dot"></span>' : ''}</td>`;
         }).join('');
-        return `<tr>
-      <td><span class="name-cell" onclick="openProfile('${key.replace(/'/g, "\\'")}')"><span class="name-badge ${nc}">${person.displayName || key}</span></span></td>
+        return `<tr${person.archived ? ' class="row-archived"' : ''}>
+      <td><span class="name-cell" onclick="openProfile('${key.replace(/'/g, "\\'")}')"><span class="name-badge ${nc}">${person.displayName || key}</span>${archBadge}</span></td>
       <td class="${ptsColor(last60)}">${fmt(last60)}</td>
       <td class="${ptsColor(sinceWu)}">${active ? fmt(sinceWu) : '<span style="color:var(--text-muted)">·</span>'}</td>
       <td>${tag}</td>${cells}</tr>`;
       }).join('');
     }
+    function toggleShowArchived() { showArchived = !showArchived; renderTable(); }
 
     /* ============ Edit ============ */
     function openEdit(pk, dt) {
@@ -1834,6 +1867,20 @@
     /* ============ Profile + calendar ============ */
     function openProfile(pk) { profilePerson = pk; const d = new Date(); calYear = d.getFullYear(); calMonth = d.getMonth(); renderProfile(); document.getElementById('profileModal').classList.add('active'); }
     function closeProfile() { document.getElementById('profileModal').classList.remove('active'); profilePerson = null; }
+    function toggleArchive() {
+      const p = attendanceData[profilePerson]; if (!p) return;
+      p.archived = !p.archived;
+      saveData(); renderProfile(); renderTable();
+      toast((p.displayName || profilePerson) + (p.archived ? ' archived — hidden from list and imports' : ' unarchived'), 'success');
+    }
+    function deleteEmployee() {
+      const p = attendanceData[profilePerson]; if (!p) return;
+      const name = p.displayName || profilePerson;
+      if (!confirm(`Permanently delete ${name} and all their attendance history? This cannot be undone.\n\n(If you just want to hide them, use Archive instead.)`)) return;
+      delete attendanceData[profilePerson];
+      saveData(); closeProfile(); renderTable();
+      toast(name + ' deleted', 'success');
+    }
     function calMove(delta) { calMonth += delta; if (calMonth < 0) { calMonth = 11; calYear--; } if (calMonth > 11) { calMonth = 0; calYear++; } renderProfile(); }
     function renderProfile() {
       const p = attendanceData[profilePerson]; if (!p) return;
@@ -1842,7 +1889,9 @@
       const fmt = x => x % 1 === 0 ? x : x.toFixed(1);
       const last60 = getLast60Pts(dates), active = getActiveWriteup(dates), sinceWu = active ? getPtsSinceWriteup(dates) : 0;
       const totalOcc = Object.values(dates).reduce((a, v) => a + getPoints(v), 0);
-      document.getElementById('profSub').textContent = `${fmt(totalOcc)} total occurrences on record`;
+      document.getElementById('profSub').textContent = `${fmt(totalOcc)} total occurrences on record` + (p.archived ? ' · Archived (hidden from list & imports)' : '');
+      const ab = document.getElementById('profArchiveBtn');
+      if (ab) { ab.textContent = p.archived ? 'Unarchive' : 'Archive'; ab.classList.toggle('primary', p.archived); }
       const l = document.getElementById('profLast60'); l.className = 'value ' + ptsColor(last60); l.textContent = fmt(last60);
       const s = document.getElementById('profSinceWu'); s.className = 'value ' + ptsColor(sinceWu); s.textContent = active ? fmt(sinceWu) : '—';
       document.getElementById('profWu').innerHTML = active ? wuTagHtml(dates) : '<span style="color:var(--text-muted);font-size:1rem">None active</span>';
@@ -1945,14 +1994,22 @@
 
     function showImportPreview(staged, counted, ignored) {
       const names = Object.entries(staged).sort((a, b) => a[1].displayName.localeCompare(b[1].displayName));
-      let totalCallouts = 0, totalLates = 0, newPeople = 0;
-      names.forEach(([k, v]) => { Object.values(v.entries).forEach(e => { if (e.val === '1') totalCallouts++; else totalLates++; }); if (!attendanceData[k]) newPeople++; });
-      let html = `<div class="summary"><b>${counted}</b> incidents will be added &nbsp;·&nbsp; <b>${totalCallouts}</b> callouts, <b>${totalLates}</b> lates &nbsp;·&nbsp; ${ignored} clock-out events ignored<br>
-    <span style="color:var(--text-muted)">${names.length} employees (${newPeople} new)</span></div>
+      let totalCallouts = 0, totalLates = 0, newPeople = 0, archivedHit = 0;
+      names.forEach(([k, v]) => {
+        const isArch = attendanceData[k] && attendanceData[k].archived;
+        Object.values(v.entries).forEach(e => { if (isArch) return; if (e.val === '1') totalCallouts++; else totalLates++; });
+        if (isArch) archivedHit++;
+        else if (!attendanceData[k]) newPeople++;
+      });
+      let html = `<div class="summary"><b>${totalCallouts + totalLates}</b> incidents will be added &nbsp;·&nbsp; <b>${totalCallouts}</b> callouts, <b>${totalLates}</b> lates &nbsp;·&nbsp; ${ignored} clock-out events ignored<br>
+    <span style="color:var(--text-muted)">${names.length} employees (${newPeople} new${archivedHit ? `, ${archivedHit} archived — will be skipped` : ''})</span></div>
     <table><thead><tr><th>Employee</th><th>Callouts</th><th>Lates</th></tr></thead><tbody>`;
       names.slice(0, 20).forEach(([k, v]) => {
+        const isArch = attendanceData[k] && attendanceData[k].archived;
         let c = 0, l = 0; Object.values(v.entries).forEach(e => { if (e.val === '1') c++; else l++; });
-        html += `<tr><td>${v.displayName}${attendanceData[k] ? '' : ' <span style="color:var(--green);font-size:0.7rem">NEW</span>'}</td><td class="imp-1">${c || ''}</td><td class="imp-half">${l || ''}</td></tr>`;
+        const label = v.displayName + (isArch ? ' <span style="color:var(--text-muted);font-size:0.7rem">ARCHIVED — SKIPPED</span>' : (attendanceData[k] ? '' : ' <span style="color:var(--green);font-size:0.7rem">NEW</span>'));
+        const style = isArch ? ' style="opacity:0.45;text-decoration:line-through"' : '';
+        html += `<tr${style}><td>${label}</td><td class="imp-1">${c || ''}</td><td class="imp-half">${l || ''}</td></tr>`;
       });
       if (names.length > 20) html += `<tr><td colspan="3" style="color:var(--text-muted)">…and ${names.length - 20} more</td></tr>`;
       html += '</tbody></table>';
@@ -1962,8 +2019,10 @@
 
     function confirmImport() {
       if (!pendingImport) return;
-      let added = 0, skipped = 0;
+      let added = 0, skipped = 0, archivedSkipped = 0;
       Object.entries(pendingImport).forEach(([key, v]) => {
+        // Skip archived employees entirely (e.g. salaried staff who don't punch)
+        if (attendanceData[key] && attendanceData[key].archived) { archivedSkipped++; return; }
         if (!attendanceData[key]) attendanceData[key] = { displayName: v.displayName, dates: {}, notes: {}, meta: {} };
         const rec = attendanceData[key];
         if (!rec.dates) rec.dates = {}; if (!rec.meta) rec.meta = {};
@@ -1977,7 +2036,10 @@
         });
       });
       saveData(); renderTable(); closeImport();
-      toast(`Imported ${added} entries` + (skipped ? `, kept ${skipped} existing` : ''), 'success');
+      let msg = `Imported ${added} entries`;
+      if (skipped) msg += `, kept ${skipped} existing`;
+      if (archivedSkipped) msg += `, skipped ${archivedSkipped} archived`;
+      toast(msg, 'success');
     }
 
     /* ============ Export / clear ============ */
